@@ -95,6 +95,23 @@ at the full path of the executable.
 claude mcp add mcp-browser -- "C:\Tools\MCP-Browser\MCP-Browser.exe"
 ```
 
+**Google Gemini Antigravity** — add this to `%USERPROFILE%\.gemini\config\mcp_config.json`
+(create the file if it does not exist), then restart Antigravity:
+
+```json
+{
+  "mcpServers": {
+    "mcp-browser": {
+      "command": "C:\\Tools\\MCP-Browser\\MCP-Browser.exe",
+      "args": []
+    }
+  }
+}
+```
+
+If the file already lists other servers, add the `"mcp-browser"` entry inside the
+existing `"mcpServers"` object rather than adding a second one.
+
 **Any other MCP client** — register a stdio server whose command is the path to
 `MCP-Browser.exe`. It takes no arguments and needs no environment variables.
 
