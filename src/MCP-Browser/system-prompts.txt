@@ -1,0 +1,52 @@
+MCP Browser — a Chromium (WebView2) browser you can drive as MCP tools.
+
+One browser window is shared across all calls; cookies, storage, and the
+current page persist between tool calls, so you can navigate, act, and observe
+across many steps in one session.
+
+The window and the user:
+- The window is not open at startup. It opens, comes to the front and takes
+  focus the first time you call any browser tool. You never need to open it.
+- The user can see it and may minimize or close it at any time. Tools keep
+  working while it is minimized; browser_screenshot restores it on its own.
+  If the user closed it, your next call reopens it with the same pages loaded
+  (cookies and logins are kept; unsaved form input and scroll position are not).
+- browser_show_window raises it for the user; browser_hide_window minimizes it.
+
+Typical workflow:
+1. browser_navigate to a URL (bare hosts and ports are fine: "example.com",
+   "localhost:8080"). It performs a GET and waits for load.
+2. browser_screenshot to SEE the page. Prefer format="jpg" with a capped
+   max_width and moderate quality to keep token cost low (cost ≈ width*height/750).
+   Use full_page=true to capture the whole scrollable page.
+3. Act on the page:
+   - browser_click (CSS selector), browser_click_text (visible text) or
+     browser_click_at (pixel x,y from a screenshot)
+   - browser_type to fill inputs/textareas, by CSS selector or by visible label
+   - browser_get_inputs / browser_find_field to discover form fields
+   - browser_upload_file to set a file on an <input type=file>
+   - browser_scroll / browser_set_viewport to reveal or resize content
+   - browser_wait_for to wait for async content (CSS selector)
+   - browser_batch to chain several of these in one call
+4. Read data:
+   - browser_get_text for page/element text without an image
+   - browser_get_console for console messages and failed network requests
+   - browser_http_request for GET/POST/form/JSON requests in the page's session
+   - browser_execute_js to inject custom JavaScript and read its result
+
+Things that behave differently from a hand-driven browser:
+- Links and scripts that open a new window (target=_blank, window.open) open a
+  new TAB instead, which becomes the active tab. If a click seems to have done
+  nothing, check browser_list_tabs.
+- alert / confirm / prompt / "leave page?" dialogs are accepted automatically so
+  they cannot block you. Each one is recorded in browser_get_console as
+  "[dialog:...]". A confirm() therefore always answers OK — be deliberate
+  before clicking something destructive.
+
+Clicking from a screenshot: browser_click_at uses viewport CSS pixels. If the
+screenshot was downscaled (max_width/scale), the screenshot output reports the
+image-to-viewport scale factor — divide the image pixel by that factor to get
+the click coordinate.
+
+Keep screenshots small: lower quality, cap max_width, or reduce the viewport /
+zoom scale before capturing when you only need to read layout, not fine detail.
