@@ -75,6 +75,9 @@
       <DependentUpon>BrowserHost.cs</DependentUpon>
     </Compile>
     <Compile Include="Browser\BrowserTab.cs" />
+    <Compile Include="Browser\TabStripControl.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="Browser\DownloadTracker.cs" />
     <Compile Include="Browser\ImageUtil.cs" />
     <Compile Include="Browser\NativeMethods.cs" />

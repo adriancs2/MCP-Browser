@@ -221,6 +221,23 @@ namespace MCP_Browser.Browser
             form.BackRequested += () => { if (HasWindow && _core.CanGoBack) TryUi(() => _core.GoBack()); };
             form.ForwardRequested += () => { if (HasWindow && _core.CanGoForward) TryUi(() => _core.GoForward()); };
             form.ReloadRequested += () => { if (HasWindow) TryUi(() => _core.Reload()); };
+            form.TabSelected += index => { if (HasWindow && index >= 0 && index < _tabs.Count) SetActiveTab(index); };
+            form.TabCloseRequested += index =>
+            {
+                if (!HasWindow || _tabs.Count <= 1) return;
+                int target = index < 0 ? _activeIndex : index;
+                if (target >= 0 && target < _tabs.Count) RemoveTab(target);
+            };
+            form.NewTabRequested += async () =>
+            {
+                if (!HasWindow) return;
+                try
+                {
+                    BrowserTab t = await AddTabAsync();
+                    SetActiveTab(_tabs.IndexOf(t));
+                }
+                catch (Exception ex) { Diag.Log("NewTabRequested failed: " + ex.Message); }
+            };
             form.FormClosed += (s, e) => OnWindowClosed(form);
 
             _form = form;
@@ -361,7 +378,9 @@ namespace MCP_Browser.Browser
             {
                 tab.LastUrl = tab.Core.Source ?? "";
                 UpdateToolbar();
+                UpdateTabBar();
             };
+            tab.Core.DocumentTitleChanged += (s, e) => UpdateTabBar();
             tab.Core.HistoryChanged += (s, e) => UpdateToolbar();
 
             // A new top-level navigation starts a fresh diagnostic window, so
@@ -390,6 +409,7 @@ namespace MCP_Browser.Browser
             await EnableDiagnosticsAsync(tab);
 
             _tabs.Add(tab);
+            UpdateTabBar();
             return tab;
         }
 
@@ -446,6 +466,33 @@ namespace MCP_Browser.Browser
 
             _tabs[index].View.BringToFront();
             UpdateToolbar();
+            UpdateTabBar();
+        }
+
+        private void UpdateTabBar()
+        {
+            if (_form == null || _form.IsDisposed) return;
+            var items = new List<TabStripItem>(_tabs.Count);
+            foreach (BrowserTab t in _tabs)
+            {
+                string url = t.LastUrl ?? "";
+                string title = "";
+                try { title = t.Core?.DocumentTitle ?? ""; } catch { }
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    if (!string.IsNullOrWhiteSpace(url) && url != "about:blank")
+                    {
+                        try { title = new Uri(url).Host; } catch { }
+                        if (string.IsNullOrWhiteSpace(title)) title = url;
+                    }
+                    else
+                    {
+                        title = "New Tab";
+                    }
+                }
+                items.Add(new TabStripItem { Id = t.Id, Title = title, Url = url });
+            }
+            _form.UpdateTabs(items, _activeIndex);
         }
 
         private void UpdateToolbar()

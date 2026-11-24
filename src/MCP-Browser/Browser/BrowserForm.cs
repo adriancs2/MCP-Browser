@@ -1,5 +1,6 @@
 using MCP_Browser.Core;
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -16,6 +17,7 @@ namespace MCP_Browser.Browser
     {
         private const int ToolbarHeight = 36;
 
+        private readonly TabStripControl _tabBar;
         private readonly TableLayoutPanel _toolbar;
         private readonly TextBox _address;
         private readonly Button _back;
@@ -26,6 +28,9 @@ namespace MCP_Browser.Browser
         public event Action BackRequested;
         public event Action ForwardRequested;
         public event Action ReloadRequested;
+        public event Action<int> TabSelected;
+        public event Action<int> TabCloseRequested;
+        public event Action NewTabRequested;
 
         /// <summary>Parent for the tabs' WebView2 controls; its client size is the page viewport.</summary>
         public Panel Content => _content;
@@ -88,12 +93,18 @@ namespace MCP_Browser.Browser
             _toolbar.Controls.Add(go, 4, 0);
             _toolbar.Controls.Add(about, 5, 0);
 
+            _tabBar = new TabStripControl { Dock = DockStyle.Top };
+            _tabBar.TabSelected += i => TabSelected?.Invoke(i);
+            _tabBar.TabCloseRequested += i => TabCloseRequested?.Invoke(i);
+            _tabBar.NewTabRequested += () => NewTabRequested?.Invoke();
+
             _content = new Panel { Dock = DockStyle.Fill, BackColor = Color.White };
 
-            // Docking is resolved back-to-front: add the Fill panel first so the
-            // toolbar claims the top edge and the content takes what is left.
+            // Docking is resolved back-to-front: add the Fill panel first, then the
+            // toolbar, then the tab strip so the tab strip claims the very top edge.
             Controls.Add(_content);
             Controls.Add(_toolbar);
+            Controls.Add(_tabBar);
 
             SetViewportSize(McpConfig.WindowWidth, McpConfig.WindowHeight);
             CenterOnWorkingArea();
@@ -122,7 +133,13 @@ namespace MCP_Browser.Browser
         {
             if (WindowState != FormWindowState.Normal)
                 WindowState = FormWindowState.Normal;
-            ClientSize = new Size(width, height + _toolbar.Height);
+            ClientSize = new Size(width, height + _toolbar.Height + _tabBar.Height);
+        }
+
+        /// <summary>Updates the visible tab strip to match BrowserHost's tab list.</summary>
+        public void UpdateTabs(IReadOnlyList<TabStripItem> tabs, int activeIndex)
+        {
+            _tabBar.SetTabs(tabs, activeIndex);
         }
 
         private void CenterOnWorkingArea()
@@ -182,6 +199,18 @@ namespace MCP_Browser.Browser
                 e.SuppressKeyPress = true;
                 _address.Focus();
                 _address.SelectAll();
+            }
+            else if (e.Control && e.KeyCode == Keys.T)
+            {
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+                NewTabRequested?.Invoke();
+            }
+            else if (e.Control && e.KeyCode == Keys.W)
+            {
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+                TabCloseRequested?.Invoke(-1);
             }
         }
     }
