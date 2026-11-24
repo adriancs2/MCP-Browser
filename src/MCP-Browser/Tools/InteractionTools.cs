@@ -119,17 +119,15 @@ namespace MCP_Browser.Tools
             if (text == null) text = "";
             bool clear = args.Value<bool?>("clear") ?? true;
 
-            string sel = JsonConvert.SerializeObject(selector);
-            string val = JsonConvert.SerializeObject(text);
-            string js =
-                "(function(){var el=document.querySelector(" + sel + ");if(!el)return 'NOTFOUND';el.scrollIntoView({block:'center',inline:'center'});el.focus();" +
-                "if(el.isContentEditable){if(" + (clear ? "true" : "false") + ")el.textContent='';el.textContent+=" + val + ";}" +
-                "else{if(" + (clear ? "true" : "false") + ")el.value='';el.value=(el.value||'')+" + val + ";}" +
-                "el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));return 'OK';})()";
-            string r = Host.RunOnUi(() => Host.ExecuteScriptAsync(js));
-            if (r == "\"NOTFOUND\"")
-                return ToolResult.Error("NOT_FOUND", $"No element matched selector '{selector}'.");
-            return ToolResult.Success($"Typed into '{selector}'.");
+            try
+            {
+                string r = Host.RunOnUi(() => Host.TypeIntoAsync(selector, text, clear));
+                return ToolResult.Success(r);
+            }
+            catch (ArgumentException ex)
+            {
+                return ToolResult.Error("NOT_FOUND", ex.Message);
+            }
         }
     }
 

@@ -87,36 +87,50 @@ namespace MCP_Browser.Tools
 
         public override string Name => "browser_get_inputs";
         public override string Description =>
-            "List the form fields on the page (input, textarea, select, button, contenteditable). Optionally restrict to a container " +
-            "by CSS selector. Returns a JSON array with tag, type, name, id, placeholder, current value, label text, and a suggested CSS selector for each — " +
-            "useful for figuring out what to fill in and how to target it.";
+            "List visible interactive form fields and ARIA controls on the page (input, textarea, select, button, contenteditable, " +
+            "and ARIA roles like button/textbox/combobox/option/menuitem/tab). Skips hidden inputs by default (except <input type=file>) " +
+            "to keep output compact. Optionally restrict to a container by CSS selector.";
 
         public override ToolParamList Params => new ToolParamList()
-            .String("container", "Optional CSS selector to scope the search to a container (e.g. a specific form).");
+            .String("container", "Optional CSS selector to scope the search to a container (e.g. a specific form).")
+            .Bool("include_hidden", "Include hidden/off-screen elements and <input type=hidden>. Default: false.", defaultValue: false);
 
         public override ToolResult Execute(JObject args)
         {
             string container = args.Value<string>("container");
+            bool includeHidden = args.Value<bool?>("include_hidden") ?? false;
             string rootExpr = string.IsNullOrWhiteSpace(container)
                 ? "document"
                 : "document.querySelector(" + JsonConvert.SerializeObject(container) + ")";
 
             string js =
-                "(function(){var root=" + rootExpr + ";if(!root)return JSON.stringify({error:'container not found'});" +
-                // Always return a selector that matches exactly this element: unique id, then unique
-                // name, then a path climbed until it is unique (or anchored on an ancestor's unique id).
+                "(function(){var root=" + rootExpr + ",incHidden=" + (includeHidden ? "true" : "false") + ";if(!root)return JSON.stringify({error:'container not found'});" +
+                "function norm(s){return (s||'').replace(/\\s+/g,' ').trim();}" +
+                "function vis(e){if(incHidden)return true;var t=(e.getAttribute('type')||'').toLowerCase();if(t==='hidden')return false;if(t==='file')return true;" +
+                "var r=e.getBoundingClientRect();if(r.width<=0||r.height<=0)return false;var st=window.getComputedStyle(e);return st.visibility!=='hidden'&&st.display!=='none';}" +
                 "function one(s){try{return document.querySelectorAll(s).length===1;}catch(x){return false;}}" +
                 "function sel(e){var t=e.tagName.toLowerCase();" +
                 "if(e.id&&one('#'+CSS.escape(e.id)))return '#'+CSS.escape(e.id);" +
                 "if(e.name){var s=t+'[name=\"'+CSS.escape(e.name)+'\"]';if(one(s))return s;}" +
+                "var al=e.getAttribute('aria-label');if(al){var sa=t+'[aria-label=\"'+CSS.escape(al)+'\"]';if(one(sa))return sa;}" +
                 "var parts=[],n=e;while(n&&n.nodeType===1&&n!==document.documentElement){" +
                 "if(n!==e&&n.id&&one('#'+CSS.escape(n.id))){parts.unshift('#'+CSS.escape(n.id));break;}" +
                 "var p=n.tagName.toLowerCase(),par=n.parentElement;if(par){var same=Array.prototype.filter.call(par.children,function(c){return c.tagName===n.tagName;});if(same.length>1)p+=':nth-of-type('+(same.indexOf(n)+1)+')';}" +
                 "parts.unshift(p);if(one(parts.join(' > ')))break;n=par;}" +
                 "return parts.join(' > ');}" +
-                "function label(e){if(e.id){var l=document.querySelector('label[for=\"'+e.id+'\"]');if(l)return l.innerText.trim();}var p=e.closest('label');return p?p.innerText.trim():'';}" +
-                "var els=root.querySelectorAll('input,textarea,select,button,[contenteditable=\"true\"]');var out=[];" +
-                "for(var i=0;i<els.length;i++){var e=els[i];out.push({tag:e.tagName.toLowerCase(),type:e.getAttribute('type')||'',name:e.name||'',id:e.id||'',placeholder:e.placeholder||'',value:(e.value!==undefined?String(e.value).slice(0,200):''),label:label(e),selector:sel(e)});}" +
+                "function label(e){" +
+                "if(e.id){var l=document.querySelector('label[for=\"'+CSS.escape(e.id)+'\"]');if(l){var lt=norm(l.innerText);if(lt)return lt;}}" +
+                "var p=e.closest('label');if(p){var pt=norm(p.innerText);if(pt)return pt;}" +
+                "var al=norm(e.getAttribute('aria-label'));if(al)return al;" +
+                "var ab=e.getAttribute('aria-labelledby');if(ab){var ael=document.getElementById(ab);if(ael){var at=norm(ael.innerText);if(at)return at;}}" +
+                "var ti=norm(e.getAttribute('title'));if(ti)return ti;" +
+                "var tag=e.tagName.toLowerCase(),role=(e.getAttribute('role')||'').toLowerCase();" +
+                "if(tag==='button'||role==='button'||role==='menuitem'||role==='option'||role==='tab'){return norm(e.innerText||e.textContent).slice(0,120);}" +
+                "return '';}" +
+                "var q='input,textarea,select,button,[contenteditable=\"true\"],[role=\"button\"],[role=\"textbox\"],[role=\"combobox\"],[role=\"checkbox\"],[role=\"radio\"],[role=\"switch\"],[role=\"option\"],[role=\"menuitem\"],[role=\"tab\"]';" +
+                "var els=root.querySelectorAll(q);var out=[];" +
+                "for(var i=0;i<els.length;i++){var e=els[i];if(!vis(e))continue;" +
+                "out.push({tag:e.tagName.toLowerCase(),type:e.getAttribute('type')||'',role:e.getAttribute('role')||'',name:e.name||'',id:e.id||'',placeholder:e.placeholder||'',value:(e.value!==undefined?String(e.value).slice(0,120):''),label:label(e).slice(0,120),selector:sel(e)});}" +
                 "return JSON.stringify(out);})()";
 
             string raw = Host.RunOnUi(() => Host.ExecuteScriptAsync(js));

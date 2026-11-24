@@ -18,7 +18,7 @@ namespace MCP_Browser.Browser
             string q = JsonConvert.SerializeObject(text ?? "");
             string clickableSel =
                 "a,button,input[type=submit],input[type=button],input[type=reset],input[type=image]," +
-                "[role=button],[role=link],[role=tab],[role=menuitem],[role=option],summary,label,[onclick]";
+                "[role=button],[role=link],[role=tab],[role=menuitem],[role=option],[role=checkbox],[role=radio],[role=switch],[role=combobox],[role=listitem],summary,label,[onclick]";
             string sel = JsonConvert.SerializeObject(clickableOnly ? clickableSel : "*");
 
             return @"(function(){
@@ -34,6 +34,22 @@ namespace MCP_Browser.Browser
     var t = norm(e.innerText || e.textContent);
     if (!t) t = norm(e.getAttribute('aria-label') || e.getAttribute('title') || e.value || e.getAttribute('alt') || '');
     return t;
+  }
+  function matchesText(e){
+    var candidates = [
+      norm(e.innerText || e.textContent),
+      norm(e.getAttribute('aria-label')),
+      norm(e.getAttribute('title')),
+      norm(e.value),
+      norm(e.getAttribute('alt'))
+    ];
+    for (var k = 0; k < candidates.length; k++) {
+      var c = candidates[k];
+      if (!c) continue;
+      var cl = c.toLowerCase();
+      if (exact ? (cl === ql) : (cl.indexOf(ql) >= 0)) return true;
+    }
+    return false;
   }
   function cssPath(e){
     if (e.id && document.querySelectorAll('#' + CSS.escape(e.id)).length === 1) return '#' + CSS.escape(e.id);
@@ -57,10 +73,7 @@ namespace MCP_Browser.Browser
   for (var i = 0; i < els.length; i++) {
     var e = els[i];
     if (!visible(e)) continue;
-    var t = labelOf(e);
-    if (!t) continue;
-    var tl = t.toLowerCase();
-    if (exact ? (tl !== ql) : (tl.indexOf(ql) < 0)) continue;
+    if (!matchesText(e)) continue;
     hits.push(e);
   }
   // Prefer the innermost match: drop any hit that contains another hit.
@@ -154,7 +167,7 @@ namespace MCP_Browser.Browser
   }
 
   var fields = Array.prototype.slice.call(
-    document.querySelectorAll('input:not([type=hidden]),textarea,select,[contenteditable=""true""]'));
+    document.querySelectorAll('input:not([type=hidden]),textarea,select,[contenteditable=""true""],[role=""textbox""],[role=""combobox""]'));
   var out = [];
 
   for (var i = 0; i < fields.length; i++) {

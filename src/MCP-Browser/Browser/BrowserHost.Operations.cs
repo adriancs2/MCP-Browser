@@ -546,5 +546,50 @@ namespace MCP_Browser.Browser
 
             return $"Dispatched {button} click x{clickCount} at viewport ({x}, {y}).";
         }
+
+        /// <summary>
+        /// Focuses an element matched by CSS selector, optionally clears it, and inserts text
+        /// via CDP Input.insertText so React, Angular/Material, Vue, and contenteditable fields
+        /// all receive genuine Blink editing events and update their internal state.
+        /// </summary>
+        public async Task<string> TypeIntoAsync(string selector, string text, bool clear)
+        {
+            string sel = JsonConvert.SerializeObject(selector);
+            string prepJs =
+                "(function(){var el=document.querySelector(" + sel + ");if(!el)return 'NOTFOUND';" +
+                "el.scrollIntoView({block:'center',inline:'center'});el.focus();" +
+                "if(" + (clear ? "true" : "false") + "){" +
+                "if(el.isContentEditable){var r=document.createRange();r.selectNodeContents(el);var s=window.getSelection();s.removeAllRanges();s.addRange(r);}" +
+                "else if(typeof el.select==='function'){el.select();}" +
+                "}else{" +
+                "if(el.isContentEditable){var r=document.createRange();r.selectNodeContents(el);r.collapse(false);var s=window.getSelection();s.removeAllRanges();s.addRange(r);}" +
+                "else if(typeof el.setSelectionRange==='function'&&el.value){var n=el.value.length;try{el.setSelectionRange(n,n);}catch(e){}}" +
+                "}" +
+                "return 'OK';})()";
+
+            CoreWebView2 core = _core;
+            string r = await core.ExecuteScriptAsync(prepJs);
+            if (r == "\"NOTFOUND\"")
+                throw new ArgumentException($"No element matched selector '{selector}'.");
+
+            if (clear)
+            {
+                var bsDown = new JObject { ["type"] = "keyDown", ["key"] = "Backspace", ["code"] = "Backspace", ["windowsVirtualKeyCode"] = 8, ["nativeVirtualKeyCode"] = 8 };
+                var bsUp = new JObject { ["type"] = "keyUp", ["key"] = "Backspace", ["code"] = "Backspace", ["windowsVirtualKeyCode"] = 8, ["nativeVirtualKeyCode"] = 8 };
+                await core.CallDevToolsProtocolMethodAsync("Input.dispatchKeyEvent", bsDown.ToString(Formatting.None));
+                await core.CallDevToolsProtocolMethodAsync("Input.dispatchKeyEvent", bsUp.ToString(Formatting.None));
+            }
+
+            if (!string.IsNullOrEmpty(text))
+            {
+                var ins = new JObject { ["text"] = text };
+                await core.CallDevToolsProtocolMethodAsync("Input.insertText", ins.ToString(Formatting.None));
+            }
+
+            string changeJs = "(function(){var el=document.querySelector(" + sel + ");if(el)el.dispatchEvent(new Event('change',{bubbles:true}));})()";
+            await core.ExecuteScriptAsync(changeJs);
+
+            return $"Typed into '{selector}'.";
+        }
     }
 }
